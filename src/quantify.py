@@ -30,7 +30,7 @@ class ReviewQuantifier:
     self,
     api_key: str,
     model: Model = Model.GEMINI_FLASH,
-    site_url: str = "https://github.com/your-repo/llm_mad",
+    site_url: str = "https://github.com/arvinduh/llm_mad",
     app_name: str = "LLM_MAD_Project",
   ) -> None:
     """Initializes the ReviewQuantifier."""
