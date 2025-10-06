@@ -1,3 +1,5 @@
+# llm_mad/prompts.py
+
 """Stores prompts for interacting with language models."""
 
 QUANTIFY_REVIEW_PROMPT = """
@@ -11,4 +13,16 @@ Review:
 "{review_text}"
 
 Score:
+"""
+
+CLASSIFY_REVIEW_PROMPT = """
+Is the following restaurant review "Good" or "Bad"?
+Consider the tone, specific details about food quality, service, and ambiance.
+
+The final output must be the single word "Good" or the single word "Bad" and nothing else.
+
+Review:
+"{review_text}"
+
+Classification:
 """

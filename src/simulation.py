@@ -1,3 +1,5 @@
+# llm_mad/simulation.py
+
 """Utilities for running and managing bandit algorithm simulations."""
 
 from collections.abc import Sequence
@@ -5,22 +7,20 @@ from collections.abc import Sequence
 import pandas as pd
 from tqdm.notebook import tqdm
 
-from src import quantify, reviews
-from src.models import base
+from . import models, reviews
+from .llm import ReviewQuantifier
 
 
 def run_simulation(
-  algorithm: base.BanditAlgorithm,
+  algorithm: models.BanditAlgorithm,
   review_selector: reviews.ReviewSelector,
-  quantifier: quantify.ReviewQuantifier,
+  quantifier: ReviewQuantifier,
   num_steps: int,
 ) -> pd.DataFrame:
   """Runs a single simulation for a given bandit algorithm."""
   history = []
-  # Ensure the selector is reset for a fair run
   review_selector.reset_all()
 
-  # Progress bar setup
   pbar = tqdm(
     range(num_steps),
     desc=f"Simulating {algorithm.__class__.__name__}",
@@ -33,28 +33,41 @@ def run_simulation(
     try:
       review_data = review_selector.get_random_review(chosen_restaurant)
       review_text = str(review_data["Review"])
-      score = quantifier.quantify(review_text)
     except IndexError:
       review_selector.reset(chosen_restaurant)
       review_data = review_selector.get_random_review(chosen_restaurant)
       review_text = str(review_data["Review"])
-      score = quantifier.quantify(review_text)
-    except (RuntimeError, ValueError) as e:
-      print(
-        f"Step {step}: Could not quantify, assigning neutral score 50. Error: {e}"
-      )
-      score = 50
 
-    algorithm.update(chosen_restaurant, score)
-    history.append({"step": step, "choice": chosen_restaurant, "score": score})
+    # Models that learn from classification use the raw text for their update.
+    if isinstance(algorithm, (models.FairweatherFriend, models.EpsilonGreedy)):
+      algorithm.update(restaurant=chosen_restaurant, review_text=review_text)
+    else:
+      # Other models (like RandomChoice) use a quantified score.
+      try:
+        score = quantifier.quantify(review_text)
+      except (RuntimeError, ValueError) as e:
+        print(
+          f"Step {step}: Quantify failed, using original rating. Error: {e}"
+        )
+        score = float(review_data["Rating"])
+
+      algorithm.update(restaurant=chosen_restaurant, score=score)
+
+    # For consistent evaluation, we always record a numeric score for plotting.
+    # We use the original star rating here as it's fast and doesn't require
+    # another API call if the algorithm didn't already need a quantified score.
+    eval_score = float(review_data["Rating"])
+    history.append(
+      {"step": step, "choice": chosen_restaurant, "score": eval_score}
+    )
 
   return pd.DataFrame(history)
 
 
 def run_experiment(
-  algorithms: Sequence[base.BanditAlgorithm],
+  algorithms: Sequence[models.BanditAlgorithm],
   review_selector: reviews.ReviewSelector,
-  quantifier: quantify.ReviewQuantifier,
+  quantifier: ReviewQuantifier,
   num_steps: int,
 ) -> pd.DataFrame:
   """Runs a full experiment comparing multiple algorithms."""
