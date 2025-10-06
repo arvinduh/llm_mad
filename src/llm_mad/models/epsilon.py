@@ -5,46 +5,43 @@
 import random
 from collections.abc import Sequence
 
-from ..llm import classifier
+from ..llm import quantifier
 from .base import BanditAlgorithm
 
 
 class EpsilonGreedy(BanditAlgorithm):
-  """An Epsilon-Greedy algorithm that learns from 'Good'/'Bad' classifications.
+  """An Epsilon-Greedy algorithm that learns from numerical review scores.
 
-  This algorithm learns from the history of review classifications for each restaurant.
+  This algorithm learns from the history of review scores for each restaurant.
   - With probability epsilon, it explores by choosing a random restaurant.
   - With probability 1 - epsilon, it exploits by choosing the restaurant with
-    the current highest proportion of "Good" reviews.
+    the current highest average score.
   """
 
   def __init__(
     self,
     restaurants: Sequence[str],
-    classifier: classifier.ReviewClassifier,
+    quantifier: quantifier.ReviewQuantifier,
     epsilon: float = 0.1,
   ):
     """Initializes the EpsilonGreedy algorithm.
 
     Args:
         restaurants: A sequence of restaurant names.
-        classifier: The ReviewClassifier used to determine if a review is
-          "Good" or "Bad".
+        quantifier: The ReviewQuantifier used to convert reviews to numerical scores.
         epsilon: The probability of choosing a random arm (exploration).
           Must be between 0.0 and 1.0.
     """
     super().__init__(restaurants)
     if not 0.0 <= epsilon <= 1.0:
       raise ValueError("Epsilon must be between 0.0 and 1.0.")
-    if not classifier:
-      raise ValueError("A ReviewClassifier is required.")
+    if not quantifier:
+      raise ValueError("A ReviewQuantifier is required.")
 
     self.epsilon = epsilon
-    self._classifier = classifier
-    # Store counts of 'good' and 'bad' reviews for each restaurant.
-    self.counts: dict[str, dict[str, int]] = {
-      r: {"good": 0, "bad": 0} for r in self.restaurants
-    }
+    self._quantifier = quantifier
+    # Store sum of scores and count of reviews for each restaurant.
+    self.scores: dict[str, list[float]] = {r: [] for r in self.restaurants}
     # A counter to ensure each restaurant is selected at least once initially.
     self._initial_rounds_left = list(self.restaurants)
 
@@ -64,34 +61,33 @@ class EpsilonGreedy(BanditAlgorithm):
       # Exploration: choose a random restaurant.
       return random.choice(self.restaurants)
 
-    # Exploitation: choose the best-known restaurant based on the proportion
-    # of "Good" reviews.
-    best_proportion = -1.0
+    # Exploitation: choose the best-known restaurant based on average score.
+    best_average = -float("inf")
     best_restaurants = []
 
     for restaurant in self.restaurants:
-      counts = self.counts[restaurant]
-      total = counts["good"] + counts["bad"]
-      if total == 0:
-        # Give restaurants with no reviews a very high score to encourage
-        # exploration, but lower than a perfect score.
-        proportion = 1.0
+      scores = self.scores[restaurant]
+      if len(scores) == 0:
+        # Give restaurants with no reviews a high score to encourage
+        # exploration, but not infinite.
+        average = 5.0  # Assume 5-star scale
       else:
-        proportion = counts["good"] / total
+        average = sum(scores) / len(scores)
 
-      if proportion > best_proportion:
-        best_proportion = proportion
+      if average > best_average:
+        best_average = average
         best_restaurants = [restaurant]
-      elif proportion == best_proportion:
+      elif average == best_average:
         best_restaurants.append(restaurant)
 
     # random.choice handles ties by picking one randomly.
     return random.choice(best_restaurants)
 
-  def update(self, restaurant: str, review_text: str) -> None:
-    """Updates the counts for the chosen restaurant using the review text."""
-    classification = self._classifier.classify(review_text)
-    if classification == "Good":
-      self.counts[restaurant]["good"] += 1
-    else:
-      self.counts
+  def update(self, restaurant: str, score: int | float) -> None:
+    """Updates the algorithm's knowledge with a new review score.
+
+    Args:
+        restaurant: The name of the restaurant that was reviewed.
+        score: The numerical score of the review.
+    """
+    self.scores[restaurant].append(float(score))
