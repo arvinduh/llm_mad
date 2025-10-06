@@ -32,7 +32,7 @@ class _LlmClientBase(abc.ABC):
     self,
     api_key: str,
     # Allow a single model or a list of models for fallback.
-    model: Union[Model, List[Model]] = Model.GEMINI_FLASH,
+    model: Union[Model, List[Model]] = [m for m in Model],
     site_url: str = "https://github.com/arvinduh/llm_mad",
     app_name: str = "LLM_MAD_Project",
   ) -> None:
@@ -99,6 +99,15 @@ class _LlmClientBase(abc.ABC):
           # 429: Rate limited. Wait and retry this same model.
           if response.status_code == 429:
             print(f"Rate limited. Retrying in {backoff_time:.2f} seconds...")
+            time.sleep(backoff_time)
+            backoff_time *= 2 * (1 + random.random())
+            continue
+
+          # 408: Timeout. Wait and retry this same model.
+          if response.status_code == 408:
+            print(
+              f"Request timed out. Retrying in {backoff_time:.2f} seconds..."
+            )
             time.sleep(backoff_time)
             backoff_time *= 2 * (1 + random.random())
             continue
