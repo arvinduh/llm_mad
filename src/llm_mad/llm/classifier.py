@@ -1,7 +1,6 @@
 """Client for converting qualitative reviews into binary classifications."""
 
-from src import prompts
-
+from .. import prompts
 from .base import _LlmClientBase
 
 

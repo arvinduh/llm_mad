@@ -1,5 +1,3 @@
-# llm_mad/prompts.py
-
 """Stores prompts for interacting with language models."""
 
 QUANTIFY_REVIEW_PROMPT = """

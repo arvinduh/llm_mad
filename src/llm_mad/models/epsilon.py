@@ -5,8 +5,7 @@
 import random
 from collections.abc import Sequence
 
-from src.llm import classifier
-
+from ..llm import classifier
 from .base import BanditAlgorithm
 
 

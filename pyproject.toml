@@ -28,3 +28,6 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/arvinduh/llm_mad"
 Issues = "https://github.com/arvinduh/llm_mad/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
