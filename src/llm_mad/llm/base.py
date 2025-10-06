@@ -8,6 +8,7 @@ from enum import Enum
 from typing import List, Union
 
 import requests
+from absl import logging
 
 
 class Model(str, Enum):
@@ -46,6 +47,9 @@ class _LlmClientBase(abc.ABC):
     else:
       self._models = [m.value for m in model]
 
+    # Cache for the working model after first successful discovery
+    self._working_model = None
+
     # Use standard header names; some proxies/hosts reject nonstandard keys.
     self._headers = {
       "Authorization": f"Bearer {api_key}",
@@ -58,9 +62,18 @@ class _LlmClientBase(abc.ABC):
     """Handles the core logic of calling the LLM API with retries and fallbacks."""
     last_error = "No models were provided to attempt."
 
+    # If we have a cached working model, try it first
+    models_to_try = (
+      [self._working_model]
+      + [m for m in self._models if m != self._working_model]
+      if self._working_model
+      else self._models
+    )
+
     # Outer loop to iterate through the list of models (for fallback).
-    for model_name in self._models:
-      print(f"Attempting to use model: {model_name}")
+    for model_name in models_to_try:
+      if not self._working_model or model_name != self._working_model:
+        logging.info("Attempting to use model: %s", model_name)
       payload = {
         "model": model_name,
         "messages": [{"role": "user", "content": prompt}],
@@ -81,6 +94,11 @@ class _LlmClientBase(abc.ABC):
 
           # On success, parse and return the content immediately.
           if response.ok:
+            # Cache this model as working if it's not already cached
+            if self._working_model != model_name:
+              self._working_model = model_name
+              logging.info("Cached working model: %s", model_name)
+
             response_json = response.json()
             try:
               content = response_json["choices"][0]["message"][
@@ -98,15 +116,17 @@ class _LlmClientBase(abc.ABC):
 
           # 429: Rate limited. Wait and retry this same model.
           if response.status_code == 429:
-            print(f"Rate limited. Retrying in {backoff_time:.2f} seconds...")
+            logging.warning(
+              "Rate limited. Retrying in %.2f seconds...", backoff_time
+            )
             time.sleep(backoff_time)
             backoff_time *= 2 * (1 + random.random())
             continue
 
           # 408: Timeout. Wait and retry this same model.
           if response.status_code == 408:
-            print(
-              f"Request timed out. Retrying in {backoff_time:.2f} seconds..."
+            logging.warning(
+              "Request timed out. Retrying in %.2f seconds...", backoff_time
             )
             time.sleep(backoff_time)
             backoff_time *= 2 * (1 + random.random())
@@ -114,8 +134,8 @@ class _LlmClientBase(abc.ABC):
 
           # 404: Model not found or unavailable. Stop retrying and move to the next model.
           if response.status_code == 404:
-            print(
-              f"Warning: Model '{model_name}' not found or unavailable (404)."
+            logging.warning(
+              "Model '%s' not found or unavailable (404).", model_name
             )
             break  # Breaks from the retry loop to try the next model in the outer loop.
 
@@ -127,7 +147,7 @@ class _LlmClientBase(abc.ABC):
         except requests.exceptions.RequestException as e:
           last_error = str(e)
           if attempt == self._MAX_RETRIES - 1:
-            print(f"Network error with model '{model_name}': {e}")
+            logging.error("Network error with model '%s': %s", model_name, e)
             break  # Stop retrying this model and move to the next one.
           time.sleep(backoff_time)
 

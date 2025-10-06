@@ -5,6 +5,7 @@
 from collections.abc import Sequence
 
 import pandas as pd
+from absl import logging
 from tqdm.notebook import tqdm
 
 from . import models, reviews
@@ -46,8 +47,8 @@ def run_simulation(
       try:
         score = quantifier.quantify(review_text)
       except (RuntimeError, ValueError) as e:
-        print(
-          f"Step {step}: Quantify failed, using original rating. Error: {e}"
+        logging.warning(
+          "Step %d: Quantify failed, using original rating. Error: %s", step, e
         )
         score = float(review_data["Rating"])
 
