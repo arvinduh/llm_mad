@@ -36,10 +36,11 @@ class _LlmClientBase(abc.ABC):
     if not api_key:
       raise ValueError("API key cannot be empty.")
     self._model = model.value
+    # Use standard header names; some proxies/hosts reject nonstandard keys.
     self._headers = {
       "Authorization": f"Bearer {api_key}",
-      "HTTP-Referer": site_url,
-      "X-Title": app_name,
+      "Referer": site_url,
+      "X-App-Name": app_name,
       "Content-Type": "application/json",
     }
 
@@ -59,15 +60,34 @@ class _LlmClientBase(abc.ABC):
           data=json.dumps(payload),
           timeout=30,
         )
+
         if response.status_code == 429:  # Rate limited
           print(f"Rate limited. Retrying in {backoff_time:.2f} seconds...")
           time.sleep(backoff_time)
           backoff_time *= 2 * (1 + random.random())
           continue
 
-        response.raise_for_status()
+        # If the provider returned a non-OK status, include their message in
+        # the raised error to make debugging (invalid model/key/payload) easier.
+        if not response.ok:
+          try:
+            body = response.text
+          except Exception:
+            body = "<unable to read response body>"
+          raise RuntimeError(
+            f"LLM API returned status {response.status_code}: {body}"
+          )
+
         response_json = response.json()
-        return response_json["choices"][0]["message"]["content"].strip()
+        # Defensive access — raise a helpful error if the shape is unexpected.
+        try:
+          content = response_json["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+          raise RuntimeError(
+            f"Unexpected API response shape: {response_json}"
+          ) from e
+
+        return content
 
       except requests.exceptions.RequestException as e:
         if attempt == self._MAX_RETRIES - 1:

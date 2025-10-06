@@ -36,8 +36,9 @@ In the very first code cell of your notebook, you need to download your project 
 
 ```python
 # In a code cell, run this:
-!git clone https://github.com/arvinduh/llm_mad.git llm_mad
-%cd llm_mad
+!git clone https://github.com/arvinduh/llm_mad.git
+%cd /content/llm_mad
+!pip install -e . --quiet
 ```
 
 ### Step 3: Install the Project
