@@ -38,7 +38,6 @@ In the very first code cell of your notebook, you need to download your project 
 # In a code cell, run this:
 !git clone https://github.com/arvinduh/llm_mad.git
 %cd /content/llm_mad
-!pip install -e .
 ```
 
 ### Step 3: Install the Project
@@ -47,7 +46,7 @@ Next, we need to install the project's code and all the libraries it depends on 
 
 ```python
 # In a new code cell, run this:
-!pip install -e . -r requirements.txt --quiet
+!pip install -e .
 ```
 
 ### Step 4: Securely Add Your API Key
@@ -62,7 +61,7 @@ It is **very important** not to paste your API key directly into a code cell. We
 
 ### Step 5: Run the Full Experiment!
 
-This is the final step! Copy the entire code block below into a new cell in your notebook and run it.
+Copy the entire code block below into a new cell in your notebook and run it.
 
 This single block of code will:
 
@@ -70,75 +69,86 @@ This single block of code will:
 2.  Load the restaurant review data.
 3.  Set up the algorithms.
 4.  Run the full simulation (this may take a few minutes).
-5.  Print the final scores and generate all the plots for your analysis.
 
 ```python
-# In a final code cell, copy and paste all of this:
-
-# --- Imports ---
-import pandas as pd
-from google.colab import userdata
-
-# Import our project's modules
-from llm_mad import models, quantify, reviews, simulation, visualization
-
-# --- Load API Key ---
-try:
-    OPENROUTER_API_KEY = userdata.get('OPENROUTER_API_KEY')
-    print("OpenRouter API key loaded successfully.")
-except Exception:
-    print("Secret 'OPENROUTER_API_KEY' not found. Check your spelling in the Secrets manager.")
-
-# --- Configuration ---
-DATA_PATH = 'data/reviews.csv'
-NUM_SIMULATION_STEPS = 200
-EPSILON = 0.1
-
 # --- Initialization ---
-print("\nLoading data...")
+print("\nLoading and filtering data...")
 df_reviews = pd.read_csv(DATA_PATH)
-df_reviews.dropna(subset=['Review', 'Restaurant'], inplace=True)
-all_restaurants = list(df_reviews['Restaurant'].unique())
-print(f"Found {len(all_restaurants)} unique restaurants.")
+df_reviews.dropna(subset=["Review", "Restaurant"], inplace=True)
 
-# Instantiate our tools
-review_selector = reviews.ReviewSelector(df_reviews)
-quantifier = quantify.ReviewQuantifier(
-    api_key=OPENROUTER_API_KEY, model=quantify.Model.GEMINI_FLASH
+# Coerce 'Rating' to numeric, handling potential errors.
+df_reviews["Rating"] = pd.to_numeric(df_reviews["Rating"], errors="coerce")
+df_reviews.dropna(
+  subset=["Rating"], inplace=True
+)  # Drop rows where rating is not a number.
+
+# Filter the DataFrame to only the restaurants you want to test.
+df_filtered = df_reviews[
+  df_reviews["Restaurant"].isin(RESTAURANTS_TO_USE)
+].copy()
+
+print(
+  f"Found {len(df_filtered)} reviews across {len(RESTAURANTS_TO_USE)} restaurants."
 )
 
-# Create a list of the algorithms we want to compare
+# Instantiate tools with the filtered data
+review_selector = reviews.ReviewSelector(df_filtered)
+quantifier = ReviewQuantifier(api_key=OPENROUTER_API_KEY)
+classifier = ReviewClassifier(api_key=OPENROUTER_API_KEY)
+
+# --- Create a list of the algorithms to compare ---
+# This includes your proposed algorithm and the baselines from your notebook.
 algorithms_to_run = [
-    models.EpsilonGreedy(restaurants=all_restaurants, epsilon=EPSILON),
-    models.FairweatherFriend(restaurants=all_restaurants),
+  models.EpsilonGreedy(
+    restaurants=RESTAURANTS_TO_USE, quantifier=quantifier, epsilon=EPSILON_VALUE
+  ),
+  models.FairweatherFriend(
+    restaurants=RESTAURANTS_TO_USE, classifier=classifier
+  ),
+  models.RandomChoice(restaurants=RESTAURANTS_TO_USE),
 ]
 
-# --- Run the Experiment ---
-print("\n--- Starting Experiment (this might take a few minutes) ---")
+# --- Run the entire experiment with one function call ---
+print("\n--- Starting Experiment (this may take a few minutes) ---")
 all_results = simulation.run_experiment(
-    algorithms=algorithms_to_run,
-    review_selector=review_selector,
-    quantifier=quantifier,
-    num_steps=NUM_SIMULATION_STEPS,
+  algorithms=algorithms_to_run,
+  review_selector=review_selector,
+  quantifier=quantifier,
+  num_steps=NUM_SIMULATION_STEPS,
 )
-print("\n--- ✅ Experiment Complete ---")
+print("\n--- Experiment Complete ---")
+```
 
+### Step 6: Visualize Your Results
 
-# --- Evaluate and Visualize Results ---
+This is the final step! Once you have all your results, you can print it and visualize your results!
+
+```python
+# --- Performance Metrics ---
 print("\n--- Performance Metrics ---")
-total_rewards = all_results.groupby('algorithm')['score'].sum()
-print("Total Reward per Algorithm:")
+total_rewards = all_results.groupby("algorithm")["score"].sum()
+print("Total Reward (Score) per Algorithm:")
 print(total_rewards)
 
+average_rewards = all_results.groupby("algorithm")["score"].mean()
+print("\nAverage Reward (Score) per Algorithm:")
+print(average_rewards)
+
+# --- Visualizations ---
 print("\n--- Generating Visualizations ---")
+
+# This plot is equivalent to your original notebook's `plot_ratings_over_time`
+# but compares all algorithms at once.
+visualization.plot_average_reward_over_time(
+  all_results, "Running Average Reward Over Time"
+)
+
+# Additional visualizations for a more comprehensive analysis.
 visualization.plot_cumulative_reward(
-    all_results, 'Cumulative Reward: EpsilonGreedy vs. FairweatherFriend'
+  all_results, "Cumulative Reward Comparison"
 )
 visualization.plot_restaurant_choices(
-    all_results, 'Distribution of Restaurant Choices'
-)
-visualization.plot_average_reward_over_time(
-    all_results, 'Rolling Average Reward Over Time'
+  all_results, "Distribution of Restaurant Choices"
 )
 ```
 
