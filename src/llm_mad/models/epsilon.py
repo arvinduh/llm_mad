@@ -83,11 +83,13 @@ class EpsilonGreedy(BanditAlgorithm):
     # random.choice handles ties by picking one randomly.
     return random.choice(best_restaurants)
 
-  def update(self, restaurant: str, score: int | float) -> None:
+  def update(self, restaurant: str, review_text: str) -> None:
     """Updates the algorithm's knowledge with a new review score.
 
     Args:
         restaurant: The name of the restaurant that was reviewed.
-        score: The numerical score of the review.
+        review_text: The text of the review.
     """
-    self.scores[restaurant].append(float(score))
+    self.scores[restaurant].append(
+      float(self._quantifier.quantify(review_text))
+    )
