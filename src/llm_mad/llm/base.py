@@ -12,10 +12,10 @@ import requests
 class Model(str, Enum):
   """Enumeration of supported models on OpenRouter."""
 
-  GEMINI_FLASH = "google/gemini-flash"
-  GEMINI_PRO = "google/gemini-pro"
+  GEMINI_FLASH = "google/gemini-flash-1.5"
+  GEMINI_PRO = "google/gemini-pro-1.5"
   GPT_4O = "openai/gpt-4o"
-  CLAUDE_3_HAIKU = "anthropic/claude-3-haiku-20240307"
+  CLAUDE_3_HAIKU = "anthropic/claude-3-haiku"
 
 
 class _LlmClientBase(abc.ABC):
